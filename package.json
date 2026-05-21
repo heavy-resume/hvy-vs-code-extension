@@ -121,6 +121,22 @@
           ],
           "default": "low",
           "description": "Reasoning effort to send with OpenAI Responses API requests."
+        },
+        "hvy.editor.defaultMode": {
+          "type": "string",
+          "enum": [
+            "viewer",
+            "ai",
+            "editor",
+            "advanced"
+          ],
+          "default": "viewer",
+          "description": "Default mode used when opening .hvy and .thvy files."
+        },
+        "hvy.editor.showModeControls": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the small Viewer, AI, Editor, and Advanced mode controls in the HVY webview."
         }
       }
     }

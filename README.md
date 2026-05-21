@@ -75,6 +75,11 @@ enter the webview bundle. Configure:
 - `hvy.ai.apiKey`
 - `hvy.ai.openAiReasoningEffort` for OpenAI requests
 
+Editor settings:
+
+- `hvy.editor.defaultMode`: `viewer`, `ai`, `editor`, or `advanced`
+- `hvy.editor.showModeControls`: show or hide the top-right mode switcher
+
 ## Release Dependency
 
 For release packaging, switch the dependency to the pinned git ref:
