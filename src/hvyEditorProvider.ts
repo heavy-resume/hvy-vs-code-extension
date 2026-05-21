@@ -5,13 +5,14 @@ import * as vscode from 'vscode';
 import { requestAiCompletion, type HvyChatRequest } from './providerClient';
 
 type HvyExtension = '.hvy' | '.thvy';
-type HvyViewMode = 'viewer' | 'ai' | 'editor' | 'advanced';
+type HvyViewMode = 'viewer' | 'ai' | 'editor' | 'advanced' | 'hvy';
 
 type WebviewMessage =
   | { type: 'ready' }
   | { type: 'dirty'; dirty?: boolean; mode?: HvyViewMode; reason?: string; source?: string; contentsBase64?: string }
   | { type: 'undoCommand' }
   | { type: 'redoCommand' }
+  | { type: 'openTextEditor'; contentsBase64?: string }
   | { type: 'historyApplied'; requestId: string; contentsBase64: string }
   | { type: 'log'; level: 'debug' | 'info' | 'warn' | 'error'; message: string }
   | { type: 'save'; requestId: string; contentsBase64: string }
@@ -265,6 +266,14 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
       return;
     }
 
+    if (message.type === 'openTextEditor') {
+      if (message.contentsBase64 && message.contentsBase64 !== document.contentsBase64) {
+        this.fireDocumentEdit(document, message.contentsBase64, 'open-text-editor', 'mode-controls');
+      }
+      await vscode.commands.executeCommand('vscode.openWith', document.uri, 'default');
+      return;
+    }
+
     if (message.type === 'historyApplied') {
       document.completeHistoryOperation(message.requestId, message.contentsBase64);
       return;
@@ -396,6 +405,13 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
       align-items: stretch;
       gap: 3px;
     }
+    .hvy-vscode-editor-submodes {
+      position: absolute;
+      top: calc(100% + 3px);
+      right: 0;
+      display: inline-flex;
+      gap: 3px;
+    }
     .hvy-vscode-mode-button {
       min-width: 32px;
       height: 30px;
@@ -411,22 +427,17 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
       font: 600 11px var(--vscode-font-family);
       cursor: pointer;
     }
-    .hvy-vscode-mode-button[data-hvy-vscode-mode="advanced"] {
-      position: absolute;
-      top: calc(100% + 3px);
-      left: 0;
-      right: 0;
-      width: 100%;
+    .hvy-vscode-editor-submodes .hvy-vscode-mode-button {
       min-width: 0;
       height: 24px;
-      padding: 0 3px;
+      padding: 0 6px;
       font-size: 10px;
       letter-spacing: 0;
       color: var(--vscode-icon-foreground);
       background: color-mix(in srgb, var(--vscode-editorWidget-background) 96%, var(--vscode-toolbar-hoverBackground) 4%);
       box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
     }
-    .hvy-vscode-mode-button[data-hvy-vscode-mode="advanced"] span {
+    .hvy-vscode-editor-submodes .hvy-vscode-mode-button span {
       display: inline;
     }
     .hvy-vscode-mode-button svg {
@@ -447,7 +458,8 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
       background: var(--vscode-button-background);
     }
     @media (max-width: 700px) {
-      .hvy-vscode-mode-button:not([data-hvy-vscode-mode="advanced"]) span {
+      .hvy-vscode-mode-top > .hvy-vscode-mode-button span,
+      .hvy-vscode-editor-stack > .hvy-vscode-mode-button span {
         display: none;
       }
     }
@@ -609,9 +621,9 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
       }
       controls.classList.toggle('is-editor-enabled', currentMode === 'editor' || currentMode === 'advanced');
       const buttonHtml = (mode) => {
-        const label = mode === 'ai' ? 'AI' : mode === 'advanced' ? 'ADV' : mode[0].toUpperCase() + mode.slice(1);
+        const label = mode === 'ai' ? 'AI' : mode === 'advanced' ? 'ADV' : mode === 'hvy' ? 'HVY' : mode[0].toUpperCase() + mode.slice(1);
         const active = mode === currentMode ? ' is-active' : '';
-        const contents = mode === 'advanced' ? '<span>ADV</span>' : svgIcon(mode) + '<span>' + label + '</span>';
+        const contents = mode === 'advanced' || mode === 'hvy' ? '<span>' + label + '</span>' : svgIcon(mode) + '<span>' + label + '</span>';
         return '<button type="button" class="hvy-vscode-mode-button' + active + '" data-hvy-vscode-mode="' + mode + '" title="' + label + '" aria-label="' + label + '">' + contents + '</button>';
       };
       const showAdvanced = currentMode === 'editor' || currentMode === 'advanced';
@@ -620,7 +632,7 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
         + buttonHtml('ai')
         + '<span class="hvy-vscode-editor-stack">'
         + buttonHtml('editor')
-        + (showAdvanced ? buttonHtml('advanced') : '')
+        + (showAdvanced ? '<span class="hvy-vscode-editor-submodes">' + buttonHtml('advanced') + buttonHtml('hvy') + '</span>' : '')
         + '</span>'
         + '</div>';
       controls.querySelectorAll('button').forEach((button) => {
@@ -639,6 +651,10 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
       }
       try {
         currentContentsBase64 = bytesToBase64(mount.serializeDocumentBytes());
+        if (mode === 'hvy') {
+          vscode.postMessage({ type: 'openTextEditor', contentsBase64: currentContentsBase64 });
+          return;
+        }
         await loadDocument(window.HVY_VSCODE_MODULE, currentContentsBase64, window.HVY_VSCODE_BOOT.extension, mode);
       } catch (error) {
         showError(error);

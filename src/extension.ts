@@ -6,6 +6,13 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     output,
     vscode.commands.registerCommand('hvy.showOutput', () => output.show()),
+    vscode.commands.registerCommand('hvy.openPreview', async (uri?: vscode.Uri) => {
+      const target = uri ?? vscode.window.activeTextEditor?.document.uri;
+      if (!target) {
+        return;
+      }
+      await vscode.commands.executeCommand('vscode.openWith', target, HvyEditorProvider.viewType);
+    }),
     vscode.window.registerCustomEditorProvider(
       HvyEditorProvider.viewType,
       new HvyEditorProvider(context, output),

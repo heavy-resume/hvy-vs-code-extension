@@ -43,8 +43,22 @@
       {
         "command": "hvy.showOutput",
         "title": "HVY: Show Debug Output"
+      },
+      {
+        "command": "hvy.openPreview",
+        "title": "HVY: Open Preview",
+        "icon": "$(preview)"
       }
     ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "hvy.openPreview",
+          "when": "resourceExtname == .hvy || resourceExtname == .thvy",
+          "group": "navigation"
+        }
+      ]
+    },
     "languages": [
       {
         "id": "hvy",
