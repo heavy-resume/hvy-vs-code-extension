@@ -62,6 +62,10 @@ web_modules/
 
 # Output of 'npm pack'
 *.tgz
+*.vsix
+
+# Local VSIX packaging assets
+vendor/heavy-file-format/dist-embed/
 
 # Yarn Integrity file
 .yarn-integrity

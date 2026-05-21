@@ -353,6 +353,12 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
     #root {
       overflow: auto;
     }
+    body.hvy-vscode-has-mode-controls .viewer-shell .reader-document {
+      padding-top: 44px;
+    }
+    body.hvy-vscode-has-mode-controls .editor-shell .editor-tree {
+      padding-top: max(2rem, 44px);
+    }
     #boot-error {
       box-sizing: border-box;
       padding: 16px;
@@ -590,8 +596,10 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
 
     function renderModeControls() {
       if (!window.HVY_VSCODE_BOOT.showModeControls) {
+        document.body.classList.remove('hvy-vscode-has-mode-controls');
         return;
       }
+      document.body.classList.add('hvy-vscode-has-mode-controls');
       let controls = document.querySelector('.hvy-vscode-mode-controls');
       if (!controls) {
         controls = document.createElement('nav');
@@ -761,6 +769,7 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
 function resolveHvyEmbedRoot(extensionUri: vscode.Uri): string {
   const requireFromExtension = createRequire(path.join(extensionUri.fsPath, 'package.json'));
   const candidates: string[] = [];
+  candidates.push(path.join(extensionUri.fsPath, 'vendor', 'heavy-file-format', 'dist-embed'));
   try {
     candidates.push(path.join(path.dirname(requireFromExtension.resolve('heavy-file-format-ref-impl/package.json')), 'dist-embed'));
   } catch {

@@ -42,6 +42,28 @@ This repo includes a sample file for smoke testing:
 examples/resume.hvy
 ```
 
+## Local VSIX Install
+
+To install the extension into your regular VS Code windows from this checkout:
+
+```bash
+npm run install:local
+```
+
+That switches the extension back to the sibling `../heavy-file-format`
+dependency, installs dependencies, copies the built embed assets into
+`vendor/heavy-file-format`, compiles, packages `hvy-local.vsix`, and installs it
+with `code --install-extension --force`.
+
+If you only want to build the local VSIX:
+
+```bash
+npm run package:local
+```
+
+After reinstalling, reload any already-open VS Code windows before opening
+`.hvy` or `.thvy` files.
+
 ## Testing In VS Code
 
 1. Build the sibling HVY embed bundle:
@@ -110,6 +132,7 @@ VS Code Marketplace expects a square PNG, commonly 128x128 or larger. The
 current icon is copied from the Heavy Resume assets and can be replaced by
 putting a new PNG at `media/icon.png`.
 
-The `.hvy` and `.thvy` file icons are contributed through the `HVY File Icons`
-file icon theme. In the Extension Development Host, run `Preferences: File Icon
-Theme` and choose `HVY File Icons` to see that icon on HVY files.
+VS Code does not support extensions patching a single file icon into the active
+file icon theme. The extension icon is used for marketplace/extension listings;
+`.hvy` and `.thvy` files keep whatever icon the user's active file icon theme
+chooses for those extensions or language IDs.
