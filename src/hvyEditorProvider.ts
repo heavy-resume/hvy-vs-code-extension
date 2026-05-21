@@ -9,7 +9,10 @@ type HvyViewMode = 'viewer' | 'ai' | 'editor' | 'advanced';
 
 type WebviewMessage =
   | { type: 'ready' }
-  | { type: 'dirty'; dirty?: boolean; mode?: HvyViewMode; reason?: string; source?: string }
+  | { type: 'dirty'; dirty?: boolean; mode?: HvyViewMode; reason?: string; source?: string; contentsBase64?: string }
+  | { type: 'undoCommand' }
+  | { type: 'redoCommand' }
+  | { type: 'historyApplied'; requestId: string; contentsBase64: string }
   | { type: 'log'; level: 'debug' | 'info' | 'warn' | 'error'; message: string }
   | { type: 'save'; requestId: string; contentsBase64: string }
   | { type: 'ai.complete'; requestId: string; request: HvyChatRequest; debugLabel?: string }
@@ -20,16 +23,19 @@ interface PendingSave {
   reject(error: Error): void;
 }
 
+interface PendingHistoryOperation {
+  resolve(): void;
+  reject(error: Error): void;
+}
+
 class HvyDocument implements vscode.CustomDocument {
-  private readonly changeEmitter = new vscode.EventEmitter<void>();
   private readonly disposeEmitter = new vscode.EventEmitter<void>();
   private pendingSaves = new Map<string, PendingSave>();
+  private pendingHistoryOperations = new Map<string, PendingHistoryOperation>();
   private webviewPanel: vscode.WebviewPanel | undefined;
   private contents: Uint8Array;
-  private dirty = false;
 
   readonly onDidDispose = this.disposeEmitter.event;
-  readonly onDidChange = this.changeEmitter.event;
 
   private constructor(
     readonly uri: vscode.Uri,
@@ -54,17 +60,45 @@ class HvyDocument implements vscode.CustomDocument {
     this.webviewPanel = panel;
   }
 
-  markDirty(): void {
-    if (!this.dirty) {
-      this.dirty = true;
-      this.changeEmitter.fire();
+  get contentsBase64(): string {
+    return Buffer.from(this.contents).toString('base64');
+  }
+
+  updateContents(contentsBase64: string): void {
+    this.contents = Buffer.from(contentsBase64, 'base64');
+  }
+
+  async restoreContents(contentsBase64: string): Promise<void> {
+    this.updateContents(contentsBase64);
+    await this.webviewPanel?.webview.postMessage({
+      type: 'reloadDocument',
+      contentsBase64,
+      extension: this.extension,
+    });
+  }
+
+  async applyHistoryOperation(operation: 'undo' | 'redo', fallbackContentsBase64: string): Promise<void> {
+    if (!this.webviewPanel) {
+      this.updateContents(fallbackContentsBase64);
+      return;
     }
+
+    const requestId = randomRequestId();
+    const historyPromise = new Promise<void>((resolve, reject) => {
+      this.pendingHistoryOperations.set(requestId, { resolve, reject });
+    });
+    const posted = await this.webviewPanel.webview.postMessage({ type: 'applyHistory', requestId, operation, fallbackContentsBase64 });
+    if (!posted) {
+      this.pendingHistoryOperations.delete(requestId);
+      await this.restoreContents(fallbackContentsBase64);
+      return;
+    }
+    await historyPromise;
   }
 
   async save(cancellation: vscode.CancellationToken): Promise<void> {
     if (!this.webviewPanel) {
       await vscode.workspace.fs.writeFile(this.uri, this.contents);
-      this.dirty = false;
       return;
     }
 
@@ -84,7 +118,6 @@ class HvyDocument implements vscode.CustomDocument {
   async revert(): Promise<void> {
     const contents = await vscode.workspace.fs.readFile(this.uri);
     this.contents = contents;
-    this.dirty = false;
     void this.webviewPanel?.webview.postMessage({
       type: 'reloadDocument',
       contentsBase64: Buffer.from(contents).toString('base64'),
@@ -106,10 +139,9 @@ class HvyDocument implements vscode.CustomDocument {
       return;
     }
     this.pendingSaves.delete(requestId);
-    this.contents = Buffer.from(contentsBase64, 'base64');
+    this.updateContents(contentsBase64);
     vscode.workspace.fs.writeFile(this.uri, this.contents).then(
       () => {
-        this.dirty = false;
         void this.webviewPanel?.webview.postMessage({ type: 'saved' });
         pending.resolve();
       },
@@ -117,12 +149,25 @@ class HvyDocument implements vscode.CustomDocument {
     );
   }
 
+  completeHistoryOperation(requestId: string, contentsBase64: string): void {
+    const pending = this.pendingHistoryOperations.get(requestId);
+    if (!pending) {
+      return;
+    }
+    this.pendingHistoryOperations.delete(requestId);
+    this.updateContents(contentsBase64);
+    pending.resolve();
+  }
+
   dispose(): void {
     for (const pending of this.pendingSaves.values()) {
       pending.reject(new Error('HVY editor closed before save completed.'));
     }
     this.pendingSaves.clear();
-    this.changeEmitter.dispose();
+    for (const pending of this.pendingHistoryOperations.values()) {
+      pending.reject(new Error('HVY editor closed before history operation completed.'));
+    }
+    this.pendingHistoryOperations.clear();
     this.disposeEmitter.fire();
     this.disposeEmitter.dispose();
   }
@@ -131,7 +176,7 @@ class HvyDocument implements vscode.CustomDocument {
 export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocument> {
   static readonly viewType = 'hvy.editor';
 
-  private readonly changeDocumentEmitter = new vscode.EventEmitter<vscode.CustomDocumentContentChangeEvent<HvyDocument>>();
+  private readonly changeDocumentEmitter = new vscode.EventEmitter<vscode.CustomDocumentEditEvent<HvyDocument>>();
   readonly onDidChangeCustomDocument = this.changeDocumentEmitter.event;
 
   constructor(
@@ -207,8 +252,21 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
         return;
       }
       this.log('debug', `Accepting dirty signal for ${document.uri.fsPath}${message.mode ? ` mode=${message.mode}` : ''}${message.reason ? ` reason=${message.reason}` : ''}${message.source ? ` source=${message.source}` : ''}`);
-      document.markDirty();
-      this.changeDocumentEmitter.fire({ document });
+      if (!message.contentsBase64) {
+        this.log('warn', `Ignoring dirty signal without serialized contents for ${document.uri.fsPath}`);
+        return;
+      }
+      this.fireDocumentEdit(document, message.contentsBase64, message.reason, message.source);
+      return;
+    }
+
+    if (message.type === 'undoCommand' || message.type === 'redoCommand') {
+      await vscode.commands.executeCommand(message.type === 'undoCommand' ? 'undo' : 'redo');
+      return;
+    }
+
+    if (message.type === 'historyApplied') {
+      document.completeHistoryOperation(message.requestId, message.contentsBase64);
       return;
     }
 
@@ -233,6 +291,22 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
   private log(level: 'debug' | 'info' | 'warn' | 'error', message: string): void {
     const stamp = new Date().toISOString();
     this.output.appendLine(`[${stamp}] [${level}] ${message}`);
+  }
+
+  private fireDocumentEdit(document: HvyDocument, contentsBase64: string, reason?: string, source?: string): void {
+    const before = document.contentsBase64;
+    const after = contentsBase64;
+    if (before === after) {
+      this.log('debug', `Ignoring unchanged edit signal for ${document.uri.fsPath}${reason ? ` reason=${reason}` : ''}`);
+      return;
+    }
+    document.updateContents(after);
+    this.changeDocumentEmitter.fire({
+      document,
+      label: formatEditLabel(reason, source),
+      undo: () => document.applyHistoryOperation('undo', before),
+      redo: () => document.applyHistoryOperation('redo', after),
+    });
   }
 
   private renderHtml(webview: vscode.Webview, embedRoot: string, document: HvyDocument): string {
@@ -395,6 +469,7 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
     let mount = null;
     let currentMode = 'viewer';
     let currentContentsBase64 = window.HVY_VSCODE_BOOT.contentsBase64;
+    let applyingVsCodeHistory = false;
 
     function formatLogPart(part) {
       if (part instanceof Error) {
@@ -472,6 +547,38 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
       }
     };
 
+    function isNativeUndoTarget(target) {
+      if (!(target instanceof HTMLElement)) {
+        return false;
+      }
+      if (target.closest('.theme-modal')) {
+        return false;
+      }
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+        return true;
+      }
+      return target.isContentEditable;
+    }
+
+    window.addEventListener('keydown', (event) => {
+      if (event.defaultPrevented || isNativeUndoTarget(event.target)) {
+        return;
+      }
+      const meta = event.metaKey || event.ctrlKey;
+      if (!meta) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      const isUndo = key === 'z' && !event.shiftKey;
+      const isRedo = key === 'y' || (key === 'z' && event.shiftKey);
+      if (!isUndo && !isRedo) {
+        return;
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      vscode.postMessage({ type: isUndo ? 'undoCommand' : 'redoCommand' });
+    }, { capture: true });
+
     function svgIcon(name) {
       const icons = {
         viewer: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>',
@@ -544,13 +651,18 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
         chatClient,
         storageKey: null,
         onDocumentChange(event) {
+          currentContentsBase64 = bytesToBase64(mount.serializeDocumentBytes());
           log('debug', 'Document change hook', { mode: currentMode, dirty: event?.dirty, reason: event?.reason, source: event?.source });
+          if (applyingVsCodeHistory) {
+            return;
+          }
           vscode.postMessage({
             type: 'dirty',
             dirty: event?.dirty,
             mode: currentMode,
             reason: event?.reason,
-            source: event?.source
+            source: event?.source,
+            contentsBase64: currentContentsBase64
           });
         }
       });
@@ -582,6 +694,32 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
           currentContentsBase64 = bytesToBase64(mount.serializeDocumentBytes());
           vscode.postMessage({
             type: 'save',
+            requestId: message.requestId,
+            contentsBase64: currentContentsBase64
+          });
+          return;
+        }
+        if (message?.type === 'applyHistory') {
+          applyingVsCodeHistory = true;
+          try {
+            try {
+              if (message.operation === 'undo' && typeof mount?.undo === 'function') {
+                mount.undo();
+              } else if (message.operation === 'redo' && typeof mount?.redo === 'function') {
+                mount.redo();
+              } else {
+                await loadDocument(HVY, message.fallbackContentsBase64, window.HVY_VSCODE_BOOT.extension, currentMode);
+              }
+            } catch (error) {
+              log('warn', 'HVY mount history operation failed; restoring serialized fallback.', error);
+              await loadDocument(HVY, message.fallbackContentsBase64, window.HVY_VSCODE_BOOT.extension, currentMode);
+            }
+            currentContentsBase64 = bytesToBase64(mount.serializeDocumentBytes());
+          } finally {
+            applyingVsCodeHistory = false;
+          }
+          vscode.postMessage({
+            type: 'historyApplied',
             requestId: message.requestId,
             contentsBase64: currentContentsBase64
           });
@@ -687,6 +825,14 @@ function getDefaultViewMode(): HvyViewMode {
 
 function getShowModeControls(): boolean {
   return vscode.workspace.getConfiguration('hvy.editor').get<boolean>('showModeControls') !== false;
+}
+
+function formatEditLabel(reason?: string, source?: string): string {
+  const label = reason || source;
+  if (!label) {
+    return 'Edit HVY document';
+  }
+  return `Edit HVY document (${label})`;
 }
 
 function randomRequestId(): string {
