@@ -1,0 +1,128 @@
+{
+  "name": "hvy-vs-code-extension",
+  "displayName": "HVY",
+  "description": "VS Code custom editor for .hvy and .thvy files.",
+  "version": "0.1.0",
+  "publisher": "heavy-resume",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "type": "commonjs",
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCustomEditor:hvy.editor",
+    "onCommand:hvy.showOutput"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile",
+    "use:hvy-local": "node scripts/set-hvy-dependency.cjs local",
+    "use:hvy-git": "node scripts/set-hvy-dependency.cjs git",
+    "package:release": "npm run use:hvy-git && npm install && npm run compile"
+  },
+  "dependencies": {
+    "heavy-file-format-ref-impl": "file:../heavy-file-format"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.6",
+    "@types/vscode": "^1.94.0",
+    "typescript": "^5.8.3"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "hvy.showOutput",
+        "title": "HVY: Show Debug Output"
+      }
+    ],
+    "iconThemes": [
+      {
+        "id": "hvy-file-icons",
+        "label": "HVY File Icons",
+        "path": "./media/hvy-icon-theme.json"
+      }
+    ],
+    "languages": [
+      {
+        "id": "hvy",
+        "aliases": [
+          "HVY"
+        ],
+        "extensions": [
+          ".hvy"
+        ]
+      },
+      {
+        "id": "thvy",
+        "aliases": [
+          "THVY"
+        ],
+        "extensions": [
+          ".thvy"
+        ]
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "hvy.editor",
+        "displayName": "HVY Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.hvy"
+          },
+          {
+            "filenamePattern": "*.thvy"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "configuration": {
+      "title": "HVY",
+      "properties": {
+        "hvy.ai.provider": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "anthropic",
+            "qwen"
+          ],
+          "default": "openai",
+          "description": "AI provider used by HVY editor chat and edit features."
+        },
+        "hvy.ai.model": {
+          "type": "string",
+          "default": "gpt-5.4-mini",
+          "description": "AI model used by HVY editor chat and edit features."
+        },
+        "hvy.ai.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Provider API key. Prefer setting this as a user setting; it is only read by the extension host."
+        },
+        "hvy.ai.compactionModel": {
+          "type": "string",
+          "default": "gpt-5.4-nano",
+          "description": "OpenAI model used for HVY chat compaction when the reference implementation requests compaction."
+        },
+        "hvy.ai.openAiReasoningEffort": {
+          "type": "string",
+          "enum": [
+            "none",
+            "low",
+            "medium",
+            "high"
+          ],
+          "default": "low",
+          "description": "Reasoning effort to send with OpenAI Responses API requests."
+        }
+      }
+    }
+  }
+}

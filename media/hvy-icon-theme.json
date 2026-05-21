@@ -1,0 +1,15 @@
+{
+  "iconDefinitions": {
+    "_hvy": {
+      "iconPath": "./icon.png"
+    }
+  },
+  "fileExtensions": {
+    "hvy": "_hvy",
+    "thvy": "_hvy"
+  },
+  "languageIds": {
+    "hvy": "_hvy",
+    "thvy": "_hvy"
+  }
+}
