@@ -368,6 +368,33 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
     body.hvy-vscode-has-mode-controls .editor-shell .editor-tree {
       padding-top: max(2rem, 44px);
     }
+    .hvy-document .viewer-sidebar-tab,
+    .hvy-document .editor-sidebar-tab {
+      border: 1px solid var(--hvy-button-bg);
+      border-left: 0;
+      background: var(--hvy-button-bg);
+      color: var(--hvy-button-text);
+    }
+    .hvy-document .viewer-sidebar-tab:hover,
+    .hvy-document .viewer-sidebar-tab:focus-visible,
+    .hvy-document .editor-sidebar-tab:hover,
+    .hvy-document .editor-sidebar-tab:focus-visible {
+      border-color: var(--hvy-focus);
+      background: var(--hvy-button-hover-bg, var(--hvy-button-bg));
+      color: var(--hvy-button-hover-text, var(--hvy-button-text));
+    }
+    .hvy-document .modal-head .remove-x {
+      border-color: var(--hvy-border-alt);
+      background: var(--hvy-surface);
+      color: var(--hvy-text-alt);
+      box-shadow: none;
+    }
+    .hvy-document .modal-head .remove-x:hover,
+    .hvy-document .modal-head .remove-x:focus-visible {
+      border-color: var(--hvy-focus);
+      background: color-mix(in srgb, var(--hvy-surface) 68%, var(--hvy-button-hover-bg, var(--hvy-button-bg)) 32%);
+      color: var(--hvy-button-hover-text, var(--hvy-button-text));
+    }
     #boot-error {
       box-sizing: border-box;
       padding: 16px;
@@ -398,17 +425,7 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
       gap: 3px;
       padding: 3px;
     }
-    .hvy-vscode-editor-stack {
-      position: relative;
-      display: inline-flex;
-      flex-direction: column;
-      align-items: stretch;
-      gap: 3px;
-    }
     .hvy-vscode-editor-submodes {
-      position: absolute;
-      top: calc(100% + 3px);
-      right: 0;
       display: inline-flex;
       gap: 3px;
     }
@@ -458,8 +475,7 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
       background: var(--vscode-button-background);
     }
     @media (max-width: 700px) {
-      .hvy-vscode-mode-top > .hvy-vscode-mode-button span,
-      .hvy-vscode-editor-stack > .hvy-vscode-mode-button span {
+      .hvy-vscode-mode-top > .hvy-vscode-mode-button span {
         display: none;
       }
     }
@@ -628,12 +644,10 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
       };
       const showAdvanced = currentMode === 'editor' || currentMode === 'advanced';
       controls.innerHTML = '<div class="hvy-vscode-mode-top">'
-        + buttonHtml('viewer')
-        + buttonHtml('ai')
-        + '<span class="hvy-vscode-editor-stack">'
         + buttonHtml('editor')
         + (showAdvanced ? '<span class="hvy-vscode-editor-submodes">' + buttonHtml('advanced') + buttonHtml('hvy') + '</span>' : '')
-        + '</span>'
+        + buttonHtml('ai')
+        + buttonHtml('viewer')
         + '</div>';
       controls.querySelectorAll('button').forEach((button) => {
         button.addEventListener('click', async () => {

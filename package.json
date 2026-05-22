@@ -95,7 +95,7 @@
             "filenamePattern": "*.thvy"
           }
         ],
-        "priority": "default"
+        "priority": "option"
       }
     ],
     "configuration": {
