@@ -13,10 +13,6 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onCustomEditor:hvy.editor",
-    "onCommand:hvy.showOutput"
-  ],
   "main": "./dist/extension.js",
   "scripts": {
     "compile": "tsc -p ./",
@@ -67,7 +63,11 @@
         ],
         "extensions": [
           ".hvy"
-        ]
+        ],
+        "icon": {
+          "light": "./media/icon.png",
+          "dark": "./media/icon.png"
+        }
       },
       {
         "id": "thvy",
@@ -76,7 +76,11 @@
         ],
         "extensions": [
           ".thvy"
-        ]
+        ],
+        "icon": {
+          "light": "./media/icon.png",
+          "dark": "./media/icon.png"
+        }
       }
     ],
     "customEditors": [
