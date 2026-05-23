@@ -48,6 +48,24 @@ export interface HvyChatResponse {
   toolState?: HvyToolState;
 }
 
+export interface HvySemanticFilterCandidate {
+  candidateId: string;
+}
+
+export interface HvySemanticFilterRequest {
+  prompt: string;
+  instructionPrompt: string;
+  documentTitle?: string;
+  candidates: HvySemanticFilterCandidate[];
+  candidateBudget?: Record<string, unknown>;
+}
+
+export interface HvySemanticFilterMatch {
+  candidateId: string;
+  reason?: string;
+  score?: number;
+}
+
 interface RequestOptions {
   toolTurn: boolean;
   debugLabel?: string;
@@ -79,6 +97,34 @@ export async function requestAiCompletion(request: HvyChatRequest, options: Requ
     return requestQwen(requestWithSettings, settings, options);
   }
   return requestOpenAi(requestWithSettings, settings, options);
+}
+
+export async function requestSemanticFilter(request: HvySemanticFilterRequest): Promise<HvySemanticFilterMatch[]> {
+  const response = await requestAiCompletion({
+    provider: 'openai',
+    model: 'gpt-5.4-mini',
+    mode: 'qa',
+    context: '',
+    messages: [
+      {
+        role: 'system',
+        content: [
+          'You are a semantic search ranker for HVY documents.',
+          'Return only valid JSON with a top-level "matches" array.',
+          'Each match must use a candidateId from the provided candidate list.',
+          'Keep reasons short and set score between 0 and 1.',
+        ].join('\n'),
+      },
+      {
+        role: 'user',
+        content: request.instructionPrompt,
+      },
+    ],
+  }, {
+    toolTurn: false,
+    debugLabel: 'semantic-filter',
+  });
+  return normalizeSemanticFilterMatches(response.output, request.candidates);
 }
 
 function getProviderSettings(request: HvyChatRequest): ProviderSettings {
@@ -488,6 +534,57 @@ function parseArguments(value: unknown): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function normalizeSemanticFilterMatches(output: string, candidates: HvySemanticFilterCandidate[]): HvySemanticFilterMatch[] {
+  const candidateIds = new Set(candidates.map((candidate) => candidate.candidateId));
+  const parsed = parseJsonObject(extractJsonObject(output));
+  const matches = readArray(parsed.matches);
+  const seen = new Set<string>();
+  const normalized: HvySemanticFilterMatch[] = [];
+  for (const item of matches) {
+    const record = readRecord(item);
+    const candidateId = typeof record.candidateId === 'string' ? record.candidateId.trim() : '';
+    if (!candidateId || !candidateIds.has(candidateId) || seen.has(candidateId)) {
+      continue;
+    }
+    seen.add(candidateId);
+    const reason = typeof record.reason === 'string' ? record.reason.trim() : '';
+    const score = normalizeScore(record.score);
+    normalized.push({
+      candidateId,
+      ...(reason ? { reason } : {}),
+      ...(score !== undefined ? { score } : {}),
+    });
+  }
+  return normalized;
+}
+
+function extractJsonObject(output: string): string {
+  const trimmed = output.trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) {
+    return fenced[1].trim();
+  }
+  const start = trimmed.indexOf('{');
+  const end = trimmed.lastIndexOf('}');
+  return start >= 0 && end > start ? trimmed.slice(start, end + 1) : trimmed;
+}
+
+function parseJsonObject(value: string): Record<string, unknown> {
+  try {
+    return readRecord(JSON.parse(value));
+  } catch {
+    throw new Error('Semantic filtering returned invalid JSON.');
+  }
+}
+
+function normalizeScore(value: unknown): number | undefined {
+  const numeric = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
+  if (!Number.isFinite(numeric)) {
+    return undefined;
+  }
+  return Math.max(0, Math.min(1, numeric));
 }
 
 function readRecord(value: unknown): Record<string, unknown> {

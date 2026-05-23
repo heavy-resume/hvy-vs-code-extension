@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createRequire } from 'node:module';
 import * as vscode from 'vscode';
-import { requestAiCompletion, type HvyChatRequest } from './providerClient';
+import { requestAiCompletion, requestSemanticFilter, type HvyChatRequest, type HvySemanticFilterRequest } from './providerClient';
 
 type HvyExtension = '.hvy' | '.thvy';
 type HvyViewMode = 'viewer' | 'ai' | 'editor' | 'advanced' | 'hvy';
@@ -17,7 +17,8 @@ type WebviewMessage =
   | { type: 'log'; level: 'debug' | 'info' | 'warn' | 'error'; message: string }
   | { type: 'save'; requestId: string; contentsBase64: string }
   | { type: 'ai.complete'; requestId: string; request: HvyChatRequest; debugLabel?: string }
-  | { type: 'ai.toolTurn'; requestId: string; request: HvyChatRequest; debugLabel?: string };
+  | { type: 'ai.toolTurn'; requestId: string; request: HvyChatRequest; debugLabel?: string }
+  | { type: 'semantic.filter'; requestId: string; request: HvySemanticFilterRequest };
 
 interface PendingSave {
   resolve(): void;
@@ -294,6 +295,16 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
       } catch (error) {
         await webview.postMessage({ type: 'ai.error', requestId: message.requestId, error: toError(error).message });
       }
+      return;
+    }
+
+    if (message.type === 'semantic.filter') {
+      try {
+        const matches = await requestSemanticFilter(message.request);
+        await webview.postMessage({ type: 'semantic.response', requestId: message.requestId, matches });
+      } catch (error) {
+        await webview.postMessage({ type: 'semantic.error', requestId: message.requestId, error: toError(error).message });
+      }
     }
   }
 
@@ -500,6 +511,7 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
     const bootError = document.getElementById('boot-error');
     const bootStatus = document.getElementById('boot-status');
     const pendingAi = new Map();
+    const pendingSemantic = new Map();
     let mount = null;
     let currentMode = 'viewer';
     let currentContentsBase64 = window.HVY_VSCODE_BOOT.contentsBase64;
@@ -572,6 +584,26 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
       });
     }
 
+    function postSemanticFilter(request) {
+      const requestId = crypto.randomUUID();
+      const { signal, ...serializableRequest } = request || {};
+      vscode.postMessage({ type: 'semantic.filter', requestId, request: serializableRequest });
+      return new Promise((resolve, reject) => {
+        const abort = () => {
+          pendingSemantic.delete(requestId);
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        };
+        if (signal?.aborted) {
+          abort();
+          return;
+        }
+        if (signal?.addEventListener) {
+          signal.addEventListener('abort', abort, { once: true });
+        }
+        pendingSemantic.set(requestId, { resolve, reject, signal, abort });
+      });
+    }
+
     const chatClient = {
       complete(request, options = {}) {
         return postAi('ai.complete', request, options);
@@ -580,6 +612,8 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
         return postAi('ai.toolTurn', request, options);
       }
     };
+
+    const semanticFilterProvider = (request) => postSemanticFilter(request);
 
     function isNativeUndoTarget(target) {
       if (!(target instanceof HTMLElement)) {
@@ -687,6 +721,7 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
         mode: mode === 'advanced' ? 'editor' : mode,
         showAdvancedEditor: mode === 'advanced',
         chatClient,
+        semanticFilterProvider,
         storageKey: null,
         onDocumentChange(event) {
           currentContentsBase64 = bytesToBase64(mount.serializeDocumentBytes());
@@ -782,6 +817,22 @@ export class HvyEditorProvider implements vscode.CustomEditorProvider<HvyDocumen
             pending.reject(new Error(message.error || 'HVY AI request failed.'));
           } else {
             pending.resolve(message.response);
+          }
+          return;
+        }
+        if (message?.type === 'semantic.response' || message?.type === 'semantic.error') {
+          const pending = pendingSemantic.get(message.requestId);
+          if (!pending) {
+            return;
+          }
+          pendingSemantic.delete(message.requestId);
+          if (pending.signal?.removeEventListener && pending.abort) {
+            pending.signal.removeEventListener('abort', pending.abort);
+          }
+          if (message.type === 'semantic.error') {
+            pending.reject(new Error(message.error || 'HVY semantic search failed.'));
+          } else {
+            pending.resolve(message.matches || []);
           }
         }
       });
