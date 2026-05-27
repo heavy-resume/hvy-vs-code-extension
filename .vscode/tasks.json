@@ -14,6 +14,13 @@
       "script": "install:local",
       "group": "build",
       "problemMatcher": []
+    },
+    {
+      "label": "npm: build VSIX",
+      "type": "npm",
+      "script": "package:local",
+      "group": "build",
+      "problemMatcher": []
     }
   ]
 }

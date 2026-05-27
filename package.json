@@ -1,9 +1,9 @@
 {
-  "name": "hvy-vs-code-extension",
-  "displayName": "HVY",
+  "name": "hvy",
+  "displayName": "HVY Editor",
   "description": "VS Code custom editor for .hvy and .thvy files.",
   "version": "0.1.0",
-  "publisher": "heavy-resume",
+  "publisher": "HeavyResume",
   "license": "MIT",
   "icon": "media/icon.png",
   "type": "commonjs",
@@ -21,8 +21,8 @@
     "build:vendor": "node scripts/build-local-vendor.cjs",
     "use:hvy-local": "node scripts/set-hvy-dependency.cjs local",
     "use:hvy-git": "node scripts/set-hvy-dependency.cjs git",
-    "package:local": "npm run use:hvy-local && npm install && npm run build:vendor && npm run compile && vsce package --no-dependencies --allow-missing-repository --out hvy-local.vsix",
-    "install:local": "npm run package:local && code --install-extension hvy-local.vsix --force",
+    "package:local": "npm run use:hvy-local && npm install && npm run build:vendor && npm run compile && vsce package --no-dependencies --allow-missing-repository --out hvy.vsix",
+    "install:local": "npm run package:local && code --install-extension hvy.vsix --force",
     "package:release": "npm run use:hvy-git && npm install && npm run compile"
   },
   "dependencies": {
@@ -43,7 +43,10 @@
       {
         "command": "hvy.openPreview",
         "title": "HVY: Open Preview",
-        "icon": "$(preview)"
+        "icon": {
+          "light": "./media/icon.png",
+          "dark": "./media/icon.png"
+        }
       }
     ],
     "menus": {
