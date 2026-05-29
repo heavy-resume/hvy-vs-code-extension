@@ -1,8 +1,8 @@
 {
   "name": "hvy",
   "displayName": "HVY Editor",
-  "description": "VS Code custom editor for .hvy and .thvy files.",
-  "version": "0.1.0",
+  "description": "VS Code custom editor for .hvy, .thvy, and .phvy files.",
+  "version": "0.1.1",
   "publisher": "HeavyResume",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -53,7 +53,7 @@
       "editor/title": [
         {
           "command": "hvy.openPreview",
-          "when": "resourceExtname == .hvy || resourceExtname == .thvy",
+          "when": "resourceExtname == .hvy || resourceExtname == .thvy || resourceExtname == .phvy",
           "group": "navigation"
         }
       ]
@@ -84,6 +84,19 @@
           "light": "./media/icon.png",
           "dark": "./media/icon.png"
         }
+      },
+      {
+        "id": "phvy",
+        "aliases": [
+          "PHVY"
+        ],
+        "extensions": [
+          ".phvy"
+        ],
+        "icon": {
+          "light": "./media/icon.png",
+          "dark": "./media/icon.png"
+        }
       }
     ],
     "customEditors": [
@@ -96,6 +109,9 @@
           },
           {
             "filenamePattern": "*.thvy"
+          },
+          {
+            "filenamePattern": "*.phvy"
           }
         ],
         "priority": "option"
@@ -149,7 +165,7 @@
             "advanced"
           ],
           "default": "viewer",
-          "description": "Default mode used when opening .hvy and .thvy files."
+          "description": "Default mode used when opening .hvy, .thvy, and .phvy files."
         },
         "hvy.editor.showModeControls": {
           "type": "boolean",

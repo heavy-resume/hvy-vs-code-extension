@@ -1,17 +1,17 @@
 # HVY
 
-Open, read, edit, and refine `.hvy` and `.thvy` documents directly in Visual Studio Code.
+Open, read, edit, and refine `.hvy`, `.thvy`, and `.phvy` documents directly in Visual Studio Code.
 
 HVY adds a rich custom editor for structured HVY files, including a polished reading view, visual editing tools, AI-assisted document editing, and quick access to the underlying HVY source when you need it.
 
 ## Features
 
-- Editor and viewer for `.hvy` and `.thvy` documents
+- Editor and viewer for `.hvy`, `.thvy`, and `.phvy` documents
 - AI mode for asking questions about the document and making assisted edits
 
 ## Opening HVY Files
 
-Open any `.hvy` or `.thvy` file in VS Code. The HVY editor opens automatically as the default editor for those file types.
+Open any `.hvy`, `.thvy`, or `.phvy` file in VS Code. The HVY editor opens automatically as the default editor for those file types.
 
 From the floating mode controls:
 

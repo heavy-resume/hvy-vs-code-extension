@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import * as vscode from 'vscode';
 import { requestAiCompletion, requestSemanticFilter, type HvyChatRequest, type HvySemanticFilterRequest } from './providerClient';
 
-type HvyExtension = '.hvy' | '.thvy';
+type HvyExtension = '.hvy' | '.thvy' | '.phvy';
 type HvyViewMode = 'viewer' | 'ai' | 'editor' | 'advanced' | 'hvy';
 
 type WebviewMessage =
@@ -51,7 +51,8 @@ class HvyDocument implements vscode.CustomDocument {
   }
 
   get extension(): HvyExtension {
-    return path.extname(this.uri.path).toLowerCase() === '.thvy' ? '.thvy' : '.hvy';
+    const extension = path.extname(this.uri.path).toLowerCase();
+    return extension === '.thvy' || extension === '.phvy' ? extension : '.hvy';
   }
 
   get initialContentsBase64(): string {
