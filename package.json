@@ -2,7 +2,7 @@
   "name": "hvy",
   "displayName": "HVY Editor",
   "description": "VS Code custom editor for .hvy, .thvy, and .phvy files.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "HeavyResume",
   "license": "MIT",
   "icon": "media/icon.png",
